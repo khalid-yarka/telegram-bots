@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Bot Management - Telegram Bots Platform{% endblock %}
+{% block page_title %}Bot Management{% endblock %}
+
+{% block content %}
+<!-- Filters and Actions -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-filter"></i> Filters</h3>
+        <button class="btn btn-primary" onclick="refreshBotList()">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+    </div>
+    
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <select id="type-filter" style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px;">
+            <option value="all">All Types</option>
+            <option value="master">Master</option>
+            <option value="ardayda">Ardayda</option>
+            <option value="dhalinyaro">Dhalinyaro</option>
+        </select>
+        
+        <select id="status-filter" style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px;">
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+        </select>
+        
+        <input type="text" id="search-bot" placeholder="Search bots..." 
+               style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px; flex: 1;">
+    </div>
+</div>
+
+<!-- Bots List -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-robot"></i> All Bots</h3>
+        <span id="bot-count" style="color: #94a3b8;">Loading...</span>
+    </div>
+    
+    <div class="table-container">
+        <table id="bots-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Webhook</th>
+                    <th>Owner ID</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="7" style="text-align: center;">Loading bots...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div style="display: flex; justify-content: center; gap: 8px; margin-top: 24px;">
+        <button class="btn btn-secondary" onclick="prevPage()" id="prev-btn" disabled>
+            <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <span style="padding: 8px 16px; background: #1e293b; border-radius: 6px;" id="page-info">Page 1</span>
+        <button class="btn btn-secondary" onclick="nextPage()" id="next-btn" disabled>
+            Next <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+</div>
+
+<script>
+let allBots = [];
+let filteredBots = [];
+let currentPage = 1;
+const itemsPerPage = 10;
+
+async function loadBots() {
+    try {
+        const res = await fetch('/api/bots');
+        const data = await res.json();
+        
+        if (data.success) {
+            allBots = data.bots;
+            filteredBots = [...allBots];
+            document.getElementById('bot-count').textContent = `${allBots.length} total`;
+            applyFilters();
+        }
+    } catch (error) {
+        console.error('Failed to load bots:', error);
+        document.querySelector('#bots-table tbody').innerHTML = 
+            '<tr><td colspan="7" style="text-align: center; color: #f87171;">Failed to load bots</td></tr>';
+    }
+}
+
+function applyFilters() {
+    const typeFilter = document.getElementById('type-filter').value;
+    const statusFilter = document.getElementById('status-filter').value;
+    const searchTerm = document.getElementById('search-bot').value.toLowerCase();
+    
+    filteredBots = allBots.filter(bot => {
+        // Type filter
+        if (typeFilter !== 'all' && bot.bot_type !== typeFilter) {
+            return false;
+        }
+        
+        // Status filter
+        if (statusFilter !== 'all') {
+            const isActive = statusFilter === 'active';
+            if (bot.is_active !== isActive) {
+                return false;
+            }
+        }
+        
+        // Search filter
+        if (searchTerm) {
+            const name = (bot.bot_name || '').toLowerCase();
+            const type = (bot.bot_type || '').toLowerCase();
+            const token = (bot.bot_token || '').toLowerCase();
+            
+            return name.includes(searchTerm) || 
+                   type.includes(searchTerm) || 
+                   token.includes(searchTerm);
+        }
+        
+        return true;
+    });
+    
+    currentPage = 1;
+    renderTable();
+}
+
+function renderTable() {
+    const tbody = document.querySelector('#bots-table tbody');
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    const pageBots = filteredBots.slice(start, end);
+    const totalPages = Math.ceil(filteredBots.length / itemsPerPage);
+    
+    document.getElementById('page-info').textContent = `Page ${currentPage} of ${totalPages || 1}`;
+    document.getElementById('prev-btn').disabled = currentPage === 1;
+    document.getElementById('next-btn').disabled = currentPage === totalPages || totalPages === 0;
+    
+    if (pageBots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No bots match your filters</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    
+    pageBots.forEach(bot => {
+        const row = tbody.insertRow();
+        
+        // Name
+        const nameCell = row.insertCell();
+        nameCell.innerHTML = `<strong>${bot.bot_name || 'Unnamed'}</strong>`;
+        
+        // Type
+        const typeCell = row.insertCell();
+        const typeIcons = {
+            'master': '🤖',
+            'ardayda': '📚',
+            'dhalinyaro': '👥'
+        };
+        typeCell.innerHTML = `${typeIcons[bot.bot_type] || '🤖'} ${bot.bot_type || 'unknown'}`;
+        
+        // Status
+        const statusCell = row.insertCell();
+        statusCell.innerHTML = bot.is_active ? 
+            '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>' : 
+            '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
+        
+        // Webhook (placeholder)
+        const webhookCell = row.insertCell();
+        webhookCell.innerHTML = '<span class="badge badge-info"><i class="fas fa-question"></i> Unknown</span>';
+        
+        // Owner ID
+        const ownerCell = row.insertCell();
+        ownerCell.innerHTML = `<code>${bot.owner_id || 'N/A'}</code>`;
+        
+        // Created
+        const createdCell = row.insertCell();
+        if (bot.created_at) {
+            const date = new Date(bot.created_at);
+            createdCell.textContent = date.toLocaleDateString();
+        } else {
+            createdCell.textContent = 'Unknown';
+        }
+        
+        // Actions
+        const actionsCell = row.insertCell();
+        actionsCell.innerHTML = `
+            <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="viewBot('${bot.bot_token}')">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-danger" style="padding: 4px 8px; margin-left: 4px;" onclick="deleteBot('${bot.bot_token}')">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+    });
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        renderTable();
+    }
+}
+
+function nextPage() {
+    const totalPages = Math.ceil(filteredBots.length / itemsPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        renderTable();
+    }
+}
+
+function refreshBotList() {
+    loadBots();
+}
+
+function viewBot(token) {
+    alert(`View bot details for token: ${token.substring(0, 10)}...\n(This feature coming soon)`);
+}
+
+function deleteBot(token) {
+    if (confirm(`Are you sure you want to delete bot ${token.substring(0, 10)}...?\nThis action cannot be undone!`)) {
+        alert('Delete functionality coming soon');
+    }
+}
+
+// Event listeners
+document.getElementById('type-filter').addEventListener('change', applyFilters);
+document.getElementById('status-filter').addEventListener('change', applyFilters);
+document.getElementById('search-bot').addEventListener('input', applyFilters);
+
+// Load bots on page load
+loadBots();
+
+// Auto-refresh every minute
+setInterval(loadBots, 60000);
+</script>
+{% endblock %}

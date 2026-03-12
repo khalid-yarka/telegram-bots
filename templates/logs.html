@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs - Telegram Bots Platform{% endblock %}
+{% block page_title %}System Logs{% endblock %}
+
+{% block content %}
+<!-- Log Controls -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-sliders-h"></i> Log Controls</h3>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="refreshLogs()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+            <button class="btn btn-danger" onclick="clearLogs()">
+                <i class="fas fa-trash"></i> Clear
+            </button>
+        </div>
+    </div>
+    
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <select id="log-level" style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px;">
+            <option value="all">All Levels</option>
+            <option value="info">INFO</option>
+            <option value="warning">WARNING</option>
+            <option value="error">ERROR</option>
+        </select>
+        
+        <select id="log-bot" style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px;">
+            <option value="all">All Bots</option>
+        </select>
+        
+        <input type="text" id="search-logs" placeholder="Search logs..." 
+               style="background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; padding: 8px 12px; border-radius: 6px; flex: 1;">
+    </div>
+</div>
+
+<!-- Logs Display -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-history"></i> Recent Events</h3>
+        <span id="log-count" style="color: #94a3b8;">Loading...</span>
+    </div>
+    
+    <div class="table-container">
+        <table id="logs-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Bot</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="5" style="text-align: center;">Loading logs...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    <div style="display: flex; justify-content: center; gap: 8px; margin-top: 24px;">
+        <button class="btn btn-secondary" onclick="prevLogPage()" id="log-prev-btn" disabled>
+            <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <span style="padding: 8px 16px; background: #1e293b; border-radius: 6px;" id="log-page-info">Page 1</span>
+        <button class="btn btn-secondary" onclick="nextLogPage()" id="log-next-btn" disabled>
+            Next <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Log Details Modal (hidden by default) -->
+<div id="log-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #030712; border: 1px solid #1e293b; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <div style="padding: 20px; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="color: #fff;">Log Details</h3>
+            <button onclick="closeLogModal()" style="background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer;">&times;</button>
+        </div>
+        <div style="padding: 20px;" id="log-details-content">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<script>
+let allLogs = [];
+let filteredLogs = [];
+let currentLogPage = 1;
+const logsPerPage = 20;
+
+// Sample log data (in production, this would come from an API)
+const sampleLogs = [
+    { timestamp: new Date().toISOString(), bot: 'master', user: '2094426161', action: 'admin_login', details: 'Super admin logged in', level: 'info' },
+    { timestamp: new Date(Date.now() - 60000).toISOString(), bot: 'ardayda', user: '123456789', action: 'pdf_upload', details: 'Uploaded "Math Notes.pdf"', level: 'info' },
+    { timestamp: new Date(Date.now() - 120000).toISOString(), bot: 'master', user: '987654321', action: 'add_bot', details: 'Added new bot: TestBot', level: 'info' },
+    { timestamp: new Date(Date.now() - 180000).toISOString(), bot: 'dhalinyaro', user: '555555555', action: 'webhook_error', details: 'Failed to set webhook: Connection refused', level: 'error' },
+    { timestamp: new Date(Date.now() - 240000).toISOString(), bot: 'ardayda', user: 'system', action: 'database_backup', details: 'Database backup completed', level: 'warning' },
+];
+
+async function loadLogs() {
+    try {
+        // In production, replace with actual API call
+        // const res = await fetch('/api/logs');
+        // const data = await res.json();
+        
+        // Using sample data for now
+        allLogs = sampleLogs;
+        filteredLogs = [...allLogs];
+        
+        // Populate bot filter
+        const botFilter = document.getElementById('log-bot');
+        const bots = [...new Set(allLogs.map(log => log.bot))];
+        bots.forEach(bot => {
+            const option = document.createElement('option');
+            option.value = bot;
+            option.textContent = bot;
+            botFilter.appendChild(option);
+        });
+        
+        document.getElementById('log-count').textContent = `${allLogs.length} entries`;
+        applyLogFilters();
+    } catch (error) {
+        console.error('Failed to load logs:', error);
+        document.querySelector('#logs-table tbody').innerHTML = 
+            '<tr><td colspan="5" style="text-align: center; color: #f87171;">Failed to load logs</td></tr>';
+    }
+}
+
+function applyLogFilters() {
+    const levelFilter = document.getElementById('log-level').value;
+    const botFilter = document.getElementById('log-bot').value;
+    const searchTerm = document.getElementById('search-logs').value.toLowerCase();
+    
+    filteredLogs = allLogs.filter(log => {
+        // Level filter
+        if (levelFilter !== 'all' && log.level !== levelFilter) {
+            return false;
+        }
+        
+        // Bot filter
+        if (botFilter !== 'all' && log.bot !== botFilter) {
+            return false;
+        }
+        
+        // Search filter
+        if (searchTerm) {
+            const action = (log.action || '').toLowerCase();
+            const details = (log.details || '').toLowerCase();
+            const user = String(log.user || '').toLowerCase();
+            
+            return action.includes(searchTerm) || 
+                   details.includes(searchTerm) || 
+                   user.includes(searchTerm);
+        }
+        
+        return true;
+    });
+    
+    currentLogPage = 1;
+    renderLogs();
+}
+
+function renderLogs() {
+    const tbody = document.querySelector('#logs-table tbody');
+    const start = (currentLogPage - 1) * logsPerPage;
+    const end = start + logsPerPage;
+    const pageLogs = filteredLogs.slice(start, end);
+    const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+    
+    document.getElementById('log-page-info').textContent = `Page ${currentLogPage} of ${totalPages || 1}`;
+    document.getElementById('log-prev-btn').disabled = currentLogPage === 1;
+    document.getElementById('log-next-btn').disabled = currentLogPage === totalPages || totalPages === 0;
+    
+    if (pageLogs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No logs match your filters</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    
+    pageLogs.forEach(log => {
+        const row = tbody.insertRow();
+        row.style.cursor = 'pointer';
+        row.onclick = () => showLogDetails(log);
+        
+        // Time
+        const timeCell = row.insertCell();
+        const date = new Date(log.timestamp);
+        timeCell.textContent = date.toLocaleString();
+        
+        // Bot
+        const botCell = row.insertCell();
+        botCell.innerHTML = `<span class="badge badge-info">${log.bot}</span>`;
+        
+        // User
+        const userCell = row.insertCell();
+        userCell.innerHTML = `<code>${log.user}</code>`;
+        
+        // Action
+        const actionCell = row.insertCell();
+        const levelColors = {
+            'info': 'badge-info',
+            'warning': 'badge-warning',
+            'error': 'badge-danger'
+        };
+        actionCell.innerHTML = `<span class="badge ${levelColors[log.level] || 'badge-info'}">${log.action}</span>`;
+        
+        // Details
+        const detailsCell = row.insertCell();
+        detailsCell.textContent = log.details.length > 50 ? log.details.substring(0, 50) + '...' : log.details;
+    });
+}
+
+function prevLogPage() {
+    if (currentLogPage > 1) {
+        currentLogPage--;
+        renderLogs();
+    }
+}
+
+function nextLogPage() {
+    const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+    if (currentLogPage < totalPages) {
+        currentLogPage++;
+        renderLogs();
+    }
+}
+
+function refreshLogs() {
+    loadLogs();
+}
+
+function clearLogs() {
+    if (confirm('Are you sure you want to clear all logs? This action cannot be undone!')) {
+        alert('Clear logs functionality coming soon');
+    }
+}
+
+function showLogDetails(log) {
+    const modal = document.getElementById('log-modal');
+    const content = document.getElementById('log-details-content');
+    
+    const date = new Date(log.timestamp);
+    
+    content.innerHTML = `
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Timestamp</div>
+            <div>${date.toLocaleString()}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot</div>
+            <div><span class="badge badge-info">${log.bot}</span></div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">User</div>
+            <div><code>${log.user}</code></div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Action</div>
+            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : 'badge-info'}">${log.action}</span></div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Details</div>
+            <div style="background: #1e293b; padding: 12px; border-radius: 6px; word-break: break-word;">${log.details}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Level</div>
+            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : log.level === 'warning' ? 'badge-warning' : 'badge-info'}">${log.level.toUpperCase()}</span></div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+function closeLogModal() {
+    document.getElementById('log-modal').style.display = 'none';
+}
+
+// Event listeners
+document.getElementById('log-level').addEventListener('change', applyLogFilters);
+document.getElementById('log-bot').addEventListener('change', applyLogFilters);
+document.getElementById('search-logs').addEventListener('input', applyLogFilters);
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('log-modal');
+    if (event.target === modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Load logs on page load
+loadLogs();
+
+// Auto-refresh every 30 seconds
+setInterval(loadLogs, 30000);
+</script>
+{% endblock %}

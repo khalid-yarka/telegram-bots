@@ -1,0 +1,2 @@
+-- Dhalinyaro Database Schema
+-- Will be created when we discuss this database

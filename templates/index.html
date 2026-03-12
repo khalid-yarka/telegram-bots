@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Telegram Bots Platform{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="grid">
+    <div class="stat-card">
+        <div class="stat-title">
+            <i class="fas fa-robot" style="color: #3b82f6;"></i>
+            Total Bots
+        </div>
+        <div class="stat-value" id="total-bots">-</div>
+        <div class="stat-change">
+            <i class="fas fa-arrow-up"></i>
+            <span id="active-bots">-</span> active
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-title">
+            <i class="fas fa-webhook" style="color: #10b981;"></i>
+            Webhooks
+        </div>
+        <div class="stat-value" id="active-webhooks">-</div>
+        <div class="stat-change">
+            <i class="fas fa-check-circle"></i>
+            <span id="webhook-status">-</span> active
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-title">
+            <i class="fas fa-users" style="color: #f59e0b;"></i>
+            Bot Users
+        </div>
+        <div class="stat-value" id="total-users">-</div>
+        <div class="stat-change">
+            <i class="fas fa-chart-line"></i>
+            total across all bots
+        </div>
+    </div>
+    
+    <div class="stat-card">
+        <div class="stat-title">
+            <i class="fas fa-clock" style="color: #8b5cf6;"></i>
+            Uptime
+        </div>
+        <div class="stat-value" id="uptime">-</div>
+        <div class="stat-change">
+            <i class="fas fa-check-circle" style="color: #10b981;"></i>
+            operational
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+    </div>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/bots" class="btn btn-primary">
+            <i class="fas fa-eye"></i> View All Bots
+        </a>
+        <button class="btn btn-secondary" onclick="refreshWebhooks()">
+            <i class="fas fa-sync"></i> Check Webhooks
+        </button>
+        <button class="btn btn-secondary" onclick="refreshData()">
+            <i class="fas fa-redo"></i> Refresh Stats
+        </button>
+    </div>
+</div>
+
+<!-- Recent Bots -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-history"></i> Recent Bots</h3>
+        <a href="/bots" style="color: #3b82f6; text-decoration: none; font-size: 14px;">
+            View All <i class="fas fa-arrow-right"></i>
+        </a>
+    </div>
+    
+    <div class="table-container">
+        <table id="recent-bots-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Webhook</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="5" style="text-align: center;">Loading bots...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="card">
+    <div class="card-header">
+        <h3><i class="fas fa-server"></i> System Status</h3>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+        <div>
+            <div style="color: #94a3b8; margin-bottom: 8px;">Database</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge badge-success" id="db-status">
+                    <i class="fas fa-check-circle"></i> Connected
+                </span>
+            </div>
+        </div>
+        
+        <div>
+            <div style="color: #94a3b8; margin-bottom: 8px;">Webhook Server</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge badge-success">
+                    <i class="fas fa-check-circle"></i> Running
+                </span>
+            </div>
+        </div>
+        
+        <div>
+            <div style="color: #94a3b8; margin-bottom: 8px;">Last Update</div>
+            <div id="last-update">Just now</div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadDashboardData() {
+    try {
+        const res = await fetch('/api/bots');
+        const data = await res.json();
+        
+        if (data.success) {
+            // Update stats
+            document.getElementById('total-bots').textContent = data.count;
+            
+            const activeBots = data.bots.filter(b => b.is_active).length;
+            document.getElementById('active-bots').textContent = activeBots;
+            
+            // Update recent bots table
+            const tbody = document.querySelector('#recent-bots-table tbody');
+            tbody.innerHTML = '';
+            
+            const recentBots = data.bots.slice(0, 5);
+            
+            if (recentBots.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No bots found</td></tr>';
+            } else {
+                recentBots.forEach(bot => {
+                    const row = tbody.insertRow();
+                    
+                    // Name
+                    const nameCell = row.insertCell();
+                    nameCell.innerHTML = `<strong>${bot.bot_name || 'Unnamed'}</strong>`;
+                    
+                    // Type
+                    const typeCell = row.insertCell();
+                    const typeIcons = {
+                        'master': '🤖',
+                        'ardayda': '📚',
+                        'dhalinyaro': '👥'
+                    };
+                    typeCell.innerHTML = `${typeIcons[bot.bot_type] || '🤖'} ${bot.bot_type || 'unknown'}`;
+                    
+                    // Status
+                    const statusCell = row.insertCell();
+                    statusCell.innerHTML = bot.is_active ? 
+                        '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>' : 
+                        '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
+                    
+                    // Webhook (placeholder - would need another API)
+                    const webhookCell = row.insertCell();
+                    webhookCell.innerHTML = '<span class="badge badge-info">Pending</span>';
+                    
+                    // Created
+                    const createdCell = row.insertCell();
+                    if (bot.created_at) {
+                        const date = new Date(bot.created_at);
+                        createdCell.textContent = date.toLocaleDateString();
+                    } else {
+                        createdCell.textContent = 'Unknown';
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+        document.querySelector('#recent-bots-table tbody').innerHTML = 
+            '<tr><td colspan="5" style="text-align: center; color: #f87171;">Failed to load data</td></tr>';
+    }
+}
+
+function refreshWebhooks() {
+    alert('Webhook check initiated. This may take a few moments.');
+    // In a real implementation, you'd call an API endpoint
+}
+
+function refreshData() {
+    loadDashboardData();
+}
+
+// Load data on page load
+loadDashboardData();
+
+// Auto-refresh every 30 seconds
+setInterval(loadDashboardData, 30000);
+</script>
+{% endblock %}
