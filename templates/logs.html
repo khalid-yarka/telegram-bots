@@ -55,7 +55,10 @@
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="5" style="text-align: center;">Loading logs...</td>
+                    <td colspan="5" style="text-align: center;">
+                        <div class="spinner"></div>
+                        Loading logs...
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -92,41 +95,52 @@ let filteredLogs = [];
 let currentLogPage = 1;
 const logsPerPage = 20;
 
-// Sample log data (in production, this would come from an API)
-const sampleLogs = [
-    { timestamp: new Date().toISOString(), bot: 'master', user: '2094426161', action: 'admin_login', details: 'Super admin logged in', level: 'info' },
-    { timestamp: new Date(Date.now() - 60000).toISOString(), bot: 'ardayda', user: '123456789', action: 'pdf_upload', details: 'Uploaded "Math Notes.pdf"', level: 'info' },
-    { timestamp: new Date(Date.now() - 120000).toISOString(), bot: 'master', user: '987654321', action: 'add_bot', details: 'Added new bot: TestBot', level: 'info' },
-    { timestamp: new Date(Date.now() - 180000).toISOString(), bot: 'dhalinyaro', user: '555555555', action: 'webhook_error', details: 'Failed to set webhook: Connection refused', level: 'error' },
-    { timestamp: new Date(Date.now() - 240000).toISOString(), bot: 'ardayda', user: 'system', action: 'database_backup', details: 'Database backup completed', level: 'warning' },
-];
-
 async function loadLogs() {
     try {
-        // In production, replace with actual API call
-        // const res = await fetch('/api/logs');
-        // const data = await res.json();
+        // Show loading state
+        document.querySelector('#logs-table tbody').innerHTML = 
+            '<tr><td colspan="5" style="text-align: center;"><div class="spinner"></div> Loading logs...</td></tr>';
         
-        // Using sample data for now
-        allLogs = sampleLogs;
-        filteredLogs = [...allLogs];
+        // Fetch real logs from API
+        const res = await fetch('/api/logs');
+        const data = await res.json();
         
-        // Populate bot filter
-        const botFilter = document.getElementById('log-bot');
-        const bots = [...new Set(allLogs.map(log => log.bot))];
-        bots.forEach(bot => {
-            const option = document.createElement('option');
-            option.value = bot;
-            option.textContent = bot;
-            botFilter.appendChild(option);
-        });
-        
-        document.getElementById('log-count').textContent = `${allLogs.length} entries`;
-        applyLogFilters();
+        if (data.success) {
+            allLogs = data.logs;
+            filteredLogs = [...allLogs];
+            
+            // Clear and populate bot filter
+            const botFilter = document.getElementById('log-bot');
+            botFilter.innerHTML = '<option value="all">All Bots</option>';
+            
+            // Get unique bot names/tokens
+            const botSet = new Set();
+            allLogs.forEach(log => {
+                const botName = log.bot_name || log.bot_token || 'System';
+                if (botName && botName !== 'System') {
+                    botSet.add(botName);
+                }
+            });
+            
+            // Add bot options to filter
+            Array.from(botSet).sort().forEach(bot => {
+                const option = document.createElement('option');
+                option.value = bot;
+                option.textContent = bot;
+                botFilter.appendChild(option);
+            });
+            
+            document.getElementById('log-count').textContent = `${allLogs.length} entries`;
+            applyLogFilters();
+        } else {
+            throw new Error(data.error || 'Failed to load logs');
+        }
     } catch (error) {
         console.error('Failed to load logs:', error);
         document.querySelector('#logs-table tbody').innerHTML = 
-            '<tr><td colspan="5" style="text-align: center; color: #f87171;">Failed to load logs</td></tr>';
+            '<tr><td colspan="5" style="text-align: center; color: #f87171;">' +
+            '<i class="fas fa-exclamation-circle"></i> Failed to load logs: ' + error.message + 
+            '</td></tr>';
     }
 }
 
@@ -137,24 +151,29 @@ function applyLogFilters() {
     
     filteredLogs = allLogs.filter(log => {
         // Level filter
-        if (levelFilter !== 'all' && log.level !== levelFilter) {
+        if (levelFilter !== 'all' && (log.level || 'info') !== levelFilter) {
             return false;
         }
         
         // Bot filter
-        if (botFilter !== 'all' && log.bot !== botFilter) {
-            return false;
+        if (botFilter !== 'all') {
+            const botName = log.bot_name || log.bot_token || 'System';
+            if (botName !== botFilter && log.bot_token !== botFilter) {
+                return false;
+            }
         }
         
         // Search filter
         if (searchTerm) {
-            const action = (log.action || '').toLowerCase();
+            const action = (log.action_type || '').toLowerCase();
             const details = (log.details || '').toLowerCase();
-            const user = String(log.user || '').toLowerCase();
+            const user = String(log.user_id || '').toLowerCase();
+            const bot = (log.bot_name || log.bot_token || '').toLowerCase();
             
             return action.includes(searchTerm) || 
                    details.includes(searchTerm) || 
-                   user.includes(searchTerm);
+                   user.includes(searchTerm) ||
+                   bot.includes(searchTerm);
         }
         
         return true;
@@ -189,29 +208,36 @@ function renderLogs() {
         
         // Time
         const timeCell = row.insertCell();
-        const date = new Date(log.timestamp);
-        timeCell.textContent = date.toLocaleString();
+        if (log.timestamp) {
+            const date = new Date(log.timestamp);
+            timeCell.textContent = date.toLocaleString();
+        } else {
+            timeCell.textContent = 'Unknown';
+        }
         
         // Bot
         const botCell = row.insertCell();
-        botCell.innerHTML = `<span class="badge badge-info">${log.bot}</span>`;
+        const botDisplay = log.bot_name || log.bot_token || 'System';
+        botCell.innerHTML = `<span class="badge badge-info">${botDisplay}</span>`;
         
         // User
         const userCell = row.insertCell();
-        userCell.innerHTML = `<code>${log.user}</code>`;
+        userCell.innerHTML = `<code>${log.user_id || 'System'}</code>`;
         
         // Action
         const actionCell = row.insertCell();
+        const level = log.level || 'info';
         const levelColors = {
             'info': 'badge-info',
             'warning': 'badge-warning',
             'error': 'badge-danger'
         };
-        actionCell.innerHTML = `<span class="badge ${levelColors[log.level] || 'badge-info'}">${log.action}</span>`;
+        actionCell.innerHTML = `<span class="badge ${levelColors[level] || 'badge-info'}">${log.action_type || 'Unknown'}</span>`;
         
         // Details
         const detailsCell = row.insertCell();
-        detailsCell.textContent = log.details.length > 50 ? log.details.substring(0, 50) + '...' : log.details;
+        const details = log.details || '';
+        detailsCell.textContent = details.length > 50 ? details.substring(0, 50) + '...' : details;
     });
 }
 
@@ -244,7 +270,7 @@ function showLogDetails(log) {
     const modal = document.getElementById('log-modal');
     const content = document.getElementById('log-details-content');
     
-    const date = new Date(log.timestamp);
+    const date = log.timestamp ? new Date(log.timestamp) : new Date();
     
     content.innerHTML = `
         <div style="margin-bottom: 16px;">
@@ -253,23 +279,23 @@ function showLogDetails(log) {
         </div>
         <div style="margin-bottom: 16px;">
             <div style="color: #94a3b8; margin-bottom: 4px;">Bot</div>
-            <div><span class="badge badge-info">${log.bot}</span></div>
+            <div><span class="badge badge-info">${log.bot_name || log.bot_token || 'System'}</span></div>
         </div>
         <div style="margin-bottom: 16px;">
-            <div style="color: #94a3b8; margin-bottom: 4px;">User</div>
-            <div><code>${log.user}</code></div>
+            <div style="color: #94a3b8; margin-bottom: 4px;">User ID</div>
+            <div><code>${log.user_id || 'System'}</code></div>
         </div>
         <div style="margin-bottom: 16px;">
             <div style="color: #94a3b8; margin-bottom: 4px;">Action</div>
-            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : 'badge-info'}">${log.action}</span></div>
+            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : 'badge-info'}">${log.action_type}</span></div>
         </div>
         <div style="margin-bottom: 16px;">
             <div style="color: #94a3b8; margin-bottom: 4px;">Details</div>
-            <div style="background: #1e293b; padding: 12px; border-radius: 6px; word-break: break-word;">${log.details}</div>
+            <div style="background: #1e293b; padding: 12px; border-radius: 6px; word-break: break-word;">${log.details || 'No details'}</div>
         </div>
         <div style="margin-bottom: 16px;">
             <div style="color: #94a3b8; margin-bottom: 4px;">Level</div>
-            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : log.level === 'warning' ? 'badge-warning' : 'badge-info'}">${log.level.toUpperCase()}</span></div>
+            <div><span class="badge ${log.level === 'error' ? 'badge-danger' : log.level === 'warning' ? 'badge-warning' : 'badge-info'}">${(log.level || 'info').toUpperCase()}</span></div>
         </div>
     `;
     

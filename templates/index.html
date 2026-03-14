@@ -137,7 +137,7 @@
 <script>
 async function loadDashboardData() {
     try {
-        const res = await fetch('/api/bots');
+        const res = await apiFetch('/api/bots');
         const data = await res.json();
         
         if (data.success) {

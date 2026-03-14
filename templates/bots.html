@@ -73,6 +73,22 @@
 </div>
 
 <script>
+// ==================== API CONFIGURATION (duplicated from base.html for safety) ====================
+const API_KEY = 'change-this-in-production'; // Must match the API_KEY in your environment variables
+
+// Helper function for API calls with authentication
+async function apiFetch(url, options = {}) {
+    const defaultOptions = {
+        headers: {
+            'X-API-Key': API_KEY,
+            ...options.headers
+        }
+    };
+    
+    const response = await fetch(url, { ...defaultOptions, ...options });
+    return response;
+}
+
 let allBots = [];
 let filteredBots = [];
 let currentPage = 1;
@@ -80,7 +96,7 @@ const itemsPerPage = 10;
 
 async function loadBots() {
     try {
-        const res = await fetch('/api/bots');
+        const res = await apiFetch('/api/bots');
         const data = await res.json();
         
         if (data.success) {
@@ -88,11 +104,13 @@ async function loadBots() {
             filteredBots = [...allBots];
             document.getElementById('bot-count').textContent = `${allBots.length} total`;
             applyFilters();
+        } else {
+            throw new Error(data.error || 'Failed to load bots');
         }
     } catch (error) {
         console.error('Failed to load bots:', error);
         document.querySelector('#bots-table tbody').innerHTML = 
-            '<tr><td colspan="7" style="text-align: center; color: #f87171;">Failed to load bots</td></tr>';
+            '<tr><td colspan="7" style="text-align: center; color: #f87171;">Failed to load bots: ' + error.message + '</td></tr>';
     }
 }
 

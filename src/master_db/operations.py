@@ -286,17 +286,29 @@ def remove_permission(conn, bot_token, user_id):
 # ==================== LOG OPERATIONS ====================
 
 @with_db
-def add_log_entry(conn, bot_token, action_type, user_id=None, details=None):
-    """Add entry to system logs"""
+def add_log_entry(conn, bot_token, action_type, user_id=None, details=None, level='info'):
+    """Add entry to system logs with level support"""
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            INSERT INTO system_logs (timestamp, bot_token, user_id, action_type, details)
-            VALUES (?, ?, ?, ?, ?)
-        """, (datetime.now(), bot_token, user_id, action_type, details))
+        # Check if level column exists (for backward compatibility)
+        cursor.execute("PRAGMA table_info(system_logs)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'level' in columns:
+            cursor.execute("""
+                INSERT INTO system_logs (timestamp, bot_token, user_id, action_type, details, level)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (datetime.now(), bot_token, user_id, action_type, details, level))
+        else:
+            # Fallback to old version if level column doesn't exist
+            cursor.execute("""
+                INSERT INTO system_logs (timestamp, bot_token, user_id, action_type, details)
+                VALUES (?, ?, ?, ?, ?)
+            """, (datetime.now(), bot_token, user_id, action_type, details))
         
         # Also update bot activity (lightweight)
-        update_bot_activity(bot_token)
+        if bot_token:
+            update_bot_activity(bot_token)
         
         return True
     except Exception as e:
@@ -307,27 +319,55 @@ def add_log_entry(conn, bot_token, action_type, user_id=None, details=None):
 
 
 @with_db
-def get_recent_logs(conn, bot_token=None, limit=50):
-    """Get recent system logs"""
+def get_logs(conn, limit=100, bot_token=None, action_type=None, level=None):
+    """
+    Get system logs with multiple filters
+    Enhanced version with all filter options
+    """
     cursor = conn.cursor()
     try:
-        if bot_token:
-            cursor.execute("""
-                SELECT * FROM system_logs
-                WHERE bot_token = ?
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """, (bot_token, limit))
-        else:
-            cursor.execute("""
-                SELECT * FROM system_logs
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """, (limit,))
+        query = """
+            SELECT l.*, b.bot_name 
+            FROM system_logs l
+            LEFT JOIN system_bots b ON l.bot_token = b.bot_token
+            WHERE 1=1
+        """
+        params = []
         
-        return [dict(row) for row in cursor.fetchall()]
+        if bot_token:
+            query += " AND l.bot_token = ?"
+            params.append(bot_token)
+        
+        if action_type:
+            query += " AND l.action_type = ?"
+            params.append(action_type)
+        
+        if level:
+            query += " AND l.level = ?"
+            params.append(level)
+        
+        query += " ORDER BY l.timestamp DESC LIMIT ?"
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        
+        logs = []
+        for row in cursor.fetchall():
+            log_dict = dict(row)
+            logs.append(log_dict)
+        
+        return logs
+    except Exception as e:
+        logger.error(f"Error getting logs: {e}")
+        return []
     finally:
         cursor.close()
+
+
+@with_db
+def get_recent_logs(conn, bot_token=None, limit=50):
+    """Get recent system logs (simplified version)"""
+    return get_logs(limit=limit, bot_token=bot_token)
 
 
 @with_db
@@ -345,6 +385,28 @@ def get_logs_count(conn, bot_token=None):
         
         row = cursor.fetchone()
         return row['count'] if row else 0
+    finally:
+        cursor.close()
+
+
+@with_db
+def get_logs_by_level(conn, level='error', limit=50):
+    """Get logs filtered by level (error, warning, info)"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT l.*, b.bot_name 
+            FROM system_logs l
+            LEFT JOIN system_bots b ON l.bot_token = b.bot_token
+            WHERE l.level = ?
+            ORDER BY l.timestamp DESC
+            LIMIT ?
+        """, (level, limit))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"Error getting logs by level: {e}")
+        return []
     finally:
         cursor.close()
 
@@ -467,6 +529,17 @@ def get_system_stats(conn):
         cursor.execute("SELECT COUNT(*) as count FROM system_logs")
         stats['total_logs'] = cursor.fetchone()['count']
         
+        # Logs by level
+        try:
+            cursor.execute("""
+                SELECT level, COUNT(*) as count 
+                FROM system_logs 
+                GROUP BY level
+            """)
+            stats['logs_by_level'] = dict(cursor.fetchall())
+        except:
+            stats['logs_by_level'] = {}
+        
         # Logs in last 24h
         cursor.execute("""
             SELECT COUNT(*) as count 
@@ -475,13 +548,55 @@ def get_system_stats(conn):
         """)
         stats['logs_24h'] = cursor.fetchone()['count']
         
+        # Error logs count
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM system_logs 
+                WHERE level = 'error'
+            """)
+            stats['error_logs'] = cursor.fetchone()['count']
+        except:
+            stats['error_logs'] = 0
+        
         # Total users with permissions
         cursor.execute("SELECT COUNT(DISTINCT user_id) as count FROM bot_permissions")
         stats['total_users'] = cursor.fetchone()['count']
+        
+        # Last activity
+        cursor.execute("""
+            SELECT timestamp FROM system_logs 
+            ORDER BY timestamp DESC LIMIT 1
+        """)
+        row = cursor.fetchone()
+        stats['last_activity'] = row['timestamp'] if row else None
         
         return stats
     except Exception as e:
         logger.error(f"Error getting system stats: {e}")
         return {'error': str(e)}
+    finally:
+        cursor.close()
+
+
+# ==================== DATABASE MAINTENANCE ====================
+
+@with_db
+def add_level_column_if_not_exists(conn):
+    """Add level column to system_logs table if it doesn't exist"""
+    cursor = conn.cursor()
+    try:
+        # Check if level column exists
+        cursor.execute("PRAGMA table_info(system_logs)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'level' not in columns:
+            cursor.execute("ALTER TABLE system_logs ADD COLUMN level TEXT DEFAULT 'info'")
+            logger.info("Added 'level' column to system_logs table")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error adding level column: {e}")
+        return False
     finally:
         cursor.close()
