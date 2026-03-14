@@ -1,0 +1,186 @@
+<!-- templates/modals/add_bot_modal.html -->
+<!-- Add Bot Modal - Can be included in any page -->
+
+<div id="addBotModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus-circle"></i> Add New Bot</h3>
+            <span class="close" onclick="closeAddBotModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <!-- Bot Token Input with Live Validation -->
+            <div class="form-group">
+                <label for="bot_token">
+                    Bot Token <span style="color: #f87171;">*</span>
+                    <span id="token-validation" style="margin-left: 10px; font-size: 12px;"></span>
+                </label>
+                <input type="text" 
+                       id="bot_token" 
+                       name="bot_token" 
+                       required 
+                       placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                       oninput="validateTokenInput(this)"
+                       style="font-family: monospace;">
+                <small style="color: #94a3b8;">
+                    <i class="fas fa-info-circle"></i>
+                    Get this from <a href="https://t.me/botfather" target="_blank" style="color: #3b82f6;">@BotFather</a> on Telegram
+                </small>
+            </div>
+            
+            <!-- Bot Name -->
+            <div class="form-group">
+                <label for="bot_name">
+                    Bot Name <span style="color: #f87171;">*</span>
+                    <span id="name-counter" style="margin-left: 10px; font-size: 12px; color: #94a3b8;">0/100</span>
+                </label>
+                <input type="text" 
+                       id="bot_name" 
+                       name="bot_name" 
+                       required 
+                       placeholder="My Awesome Bot"
+                       minlength="3" 
+                       maxlength="100"
+                       oninput="updateNameCounter(this)">
+            </div>
+            
+            <!-- Bot Type Selection -->
+            <div class="form-group">
+                <label for="bot_type">Bot Type <span style="color: #f87171;">*</span></label>
+                <select id="bot_type" name="bot_type" required>
+                    <option value="">-- Select Bot Type --</option>
+                    <option value="master">🤖 Master Controller</option>
+                    <option value="ardayda">📚 Ardayda Student</option>
+                    <option value="dhalinyaro">👥 Dhalinyaro Youth</option>
+                </select>
+            </div>
+            
+            <!-- Optional Bot Username -->
+            <div class="form-group">
+                <label for="bot_username">Bot Username (optional)</label>
+                <div style="display: flex; align-items: center;">
+                    <span style="background: #1e293b; padding: 10px; border: 1px solid #2d3748; border-right: none; border-radius: 6px 0 0 6px; color: #94a3b8;">@</span>
+                    <input type="text" 
+                           id="bot_username" 
+                           name="bot_username" 
+                           placeholder="mybot"
+                           style="border-radius: 0 6px 6px 0; flex: 1;"
+                           pattern="[A-Za-z][A-Za-z0-9_]{4,}"
+                           title="Username must start with a letter and be at least 5 characters long">
+                </div>
+                <small style="color: #94a3b8;">Telegram username (without @)</small>
+            </div>
+            
+            <!-- Additional Settings (Collapsible) -->
+            <details style="margin: 20px 0; background: #1e293b; border-radius: 6px; padding: 10px;">
+                <summary style="color: #94a3b8; cursor: pointer;">
+                    <i class="fas fa-cog"></i> Advanced Settings
+                </summary>
+                <div style="margin-top: 15px;">
+                    <!-- Webhook URL (read-only) -->
+                    <div class="form-group">
+                        <label>Webhook URL</label>
+                        <input type="text" 
+                               id="webhook_url" 
+                               readonly 
+                               value="https://Zabots1.pythonanywhere.com/webhook/[TOKEN]"
+                               style="background: #0f172a; color: #94a3b8; font-family: monospace;"
+                               onclick="this.select()">
+                        <small style="color: #94a3b8;">This will be set automatically</small>
+                    </div>
+                    
+                    <!-- Auto-activate toggle -->
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="auto_activate" checked style="width: auto;">
+                        <label for="auto_activate" style="margin: 0;">Activate bot immediately</label>
+                    </div>
+                    
+                    <!-- Auto-setup webhook toggle -->
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="auto_webhook" checked style="width: auto;">
+                        <label for="auto_webhook" style="margin: 0;">Setup webhook automatically</label>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeAddBotModal()">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="submit" class="btn btn-success" id="submitAddBot">
+                    <i class="fas fa-plus"></i> Add Bot
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Live token validation
+function validateTokenInput(input) {
+    const token = input.value.trim();
+    const validationSpan = document.getElementById('token-validation');
+    
+    if (!token) {
+        validationSpan.innerHTML = '';
+        return;
+    }
+    
+    // Format: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+    const tokenRegex = /^\d+:[A-Za-z0-9_-]{30,}$/;
+    
+    if (tokenRegex.test(token)) {
+        validationSpan.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> Valid format';
+        input.style.borderColor = '#10b981';
+    } else {
+        validationSpan.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #f87171;"></i> Invalid format';
+        input.style.borderColor = '#f87171';
+    }
+}
+
+// Update name character counter
+function updateNameCounter(input) {
+    const length = input.value.length;
+    const counter = document.getElementById('name-counter');
+    counter.textContent = `${length}/100`;
+    
+    if (length < 3) {
+        counter.style.color = '#f87171';
+    } else if (length > 100) {
+        counter.style.color = '#f87171';
+    } else {
+        counter.style.color = '#10b981';
+    }
+}
+
+// Update webhook URL preview when token changes
+document.getElementById('bot_token')?.addEventListener('input', function() {
+    const token = this.value.trim();
+    const webhookUrl = document.getElementById('webhook_url');
+    const baseUrl = 'https://Zabots1.pythonanywhere.com/webhook/';
+    
+    if (token) {
+        webhookUrl.value = baseUrl + token;
+    } else {
+        webhookUrl.value = baseUrl + '[TOKEN]';
+    }
+});
+
+// Close modal function
+function closeAddBotModal() {
+    document.getElementById('addBotModal').style.display = 'none';
+    document.getElementById('addBotForm').reset();
+    document.getElementById('token-validation').innerHTML = '';
+    document.getElementById('name-counter').textContent = '0/100';
+}
+
+// Prevent modal from closing when clicking inside
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('addBotModal');
+    const modalContent = document.querySelector('#addBotModal .modal-content');
+    
+    if (event.target === modal) {
+        closeAddBotModal();
+    }
+});
+</script>

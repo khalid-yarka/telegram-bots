@@ -19,6 +19,18 @@ from datetime import timedelta
 # Database operations
 from src.master_db.operations import get_bot_by_token, add_log_entry, get_all_bots, get_system_stats, get_logs
 
+# NEW: Import additional operations for bot management
+from src.master_db.operations import (
+    add_bot, delete_bot, toggle_bot_status, update_bot_name,
+    update_webhook_status, get_webhook_status
+)
+
+# NEW: Import webhook manager
+from src.utils.webhook_manager import set_webhook, delete_webhook, check_webhook
+
+# NEW: Import permissions
+from src.utils.permissions import is_super_admin
+
 # Config
 from src.config import config
 
@@ -469,6 +481,267 @@ def logs_page():
     )
 
 
+# ==================== NEW: BOT MANAGEMENT API ENDPOINTS ====================
+
+@app.route('/api/bots/add', methods=['POST'])
+@login_required
+@api_key_required
+def add_bot_api():
+    """API to add a new bot via website"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['bot_token', 'bot_name', 'bot_type']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
+        
+        # Validate token format
+        if not validate_bot_token(data['bot_token']):
+            return jsonify({'success': False, 'error': 'Invalid bot token format'}), 400
+        
+        # Check if bot already exists
+        existing = get_bot_by_token(data['bot_token'])
+        if existing:
+            return jsonify({'success': False, 'error': 'Bot token already registered'}), 400
+        
+        # Get owner_id (default to 0 for system)
+        owner_id = 0  # System admin
+        
+        # Add bot to database
+        success, message = add_bot(
+            bot_token=data['bot_token'],
+            bot_name=data['bot_name'],
+            bot_type=data['bot_type'],
+            owner_id=owner_id,
+            bot_username=data.get('bot_username')
+        )
+        
+        if success:
+            # Auto-setup webhook
+            webhook_success = set_webhook(data['bot_token'], data['bot_type'])
+            
+            # Log the action
+            add_log_entry(
+                bot_token=data['bot_token'],
+                action_type='bot_added',
+                details=f"Bot {data['bot_name']} added via web interface",
+                user_id=owner_id,
+                level='info'
+            )
+            
+            # Clear cache to force refresh
+            _cache['bots'] = None
+            
+            return jsonify({
+                'success': True,
+                'message': 'Bot added successfully',
+                'webhook_setup': webhook_success,
+                'bot': {
+                    'bot_token': data['bot_token'],
+                    'bot_name': data['bot_name'],
+                    'bot_type': data['bot_type'],
+                    'is_active': True
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error adding bot: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bots/<bot_token>/delete', methods=['POST'])
+@login_required
+@api_key_required
+def delete_bot_api(bot_token):
+    """API to delete a bot"""
+    try:
+        # Get bot info
+        bot = get_bot_by_token(bot_token)
+        if not bot:
+            return jsonify({'success': False, 'error': 'Bot not found'}), 404
+        
+        # Delete webhook first
+        delete_webhook(bot_token)
+        
+        # Delete from database
+        success, message = delete_bot(bot_token, 0)  # 0 = system admin
+        
+        if success:
+            # Log the action
+            add_log_entry(
+                bot_token=bot_token,
+                action_type='bot_deleted',
+                details=f"Bot {bot.get('bot_name')} deleted via web interface",
+                user_id=0,
+                level='warning'
+            )
+            
+            # Clear cache
+            _cache['bots'] = None
+            
+            return jsonify({'success': True, 'message': 'Bot deleted successfully'})
+        else:
+            return jsonify({'success': False, 'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error deleting bot: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bots/<bot_token>/toggle', methods=['POST'])
+@login_required
+@api_key_required
+def toggle_bot_api(bot_token):
+    """API to activate/deactivate a bot"""
+    try:
+        data = request.get_json()
+        active = data.get('active', True)
+        
+        # Get bot info
+        bot = get_bot_by_token(bot_token)
+        if not bot:
+            return jsonify({'success': False, 'error': 'Bot not found'}), 404
+        
+        success, message = toggle_bot_status(bot_token, 0, active)
+        
+        if success:
+            status = "activated" if active else "deactivated"
+            
+            # Log the action
+            add_log_entry(
+                bot_token=bot_token,
+                action_type=f'bot_{status}',
+                details=f"Bot {bot.get('bot_name')} {status} via web interface",
+                user_id=0,
+                level='info'
+            )
+            
+            # Clear cache
+            _cache['bots'] = None
+            
+            return jsonify({
+                'success': True, 
+                'message': f'Bot {status} successfully',
+                'is_active': active
+            })
+        else:
+            return jsonify({'success': False, 'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error toggling bot: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bots/<bot_token>/webhook', methods=['GET', 'POST'])
+@login_required
+@api_key_required
+def manage_webhook_api(bot_token):
+    """API to check or setup webhook"""
+    try:
+        if request.method == 'GET':
+            # Check webhook status
+            result = check_webhook(bot_token)
+            return jsonify(result)
+        
+        elif request.method == 'POST':
+            # Setup webhook
+            data = request.get_json() or {}
+            bot_type = data.get('bot_type')
+            
+            if not bot_type:
+                # Get from database
+                bot = get_bot_by_token(bot_token)
+                if not bot:
+                    return jsonify({'success': False, 'error': 'Bot not found'}), 404
+                bot_type = bot.get('bot_type')
+            
+            success = set_webhook(bot_token, bot_type)
+            
+            return jsonify({
+                'success': success,
+                'message': 'Webhook configured successfully' if success else 'Webhook setup failed'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error managing webhook: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bots/<bot_token>/rename', methods=['POST'])
+@login_required
+@api_key_required
+def rename_bot_api(bot_token):
+    """API to rename a bot"""
+    try:
+        data = request.get_json()
+        new_name = data.get('new_name')
+        
+        if not new_name or len(new_name) < 3 or len(new_name) > 100:
+            return jsonify({'success': False, 'error': 'Name must be between 3-100 characters'}), 400
+        
+        # Get bot info
+        bot = get_bot_by_token(bot_token)
+        if not bot:
+            return jsonify({'success': False, 'error': 'Bot not found'}), 404
+        
+        success, message = update_bot_name(bot_token, new_name, 0)
+        
+        if success:
+            # Log the action
+            add_log_entry(
+                bot_token=bot_token,
+                action_type='bot_renamed',
+                details=f"Bot renamed from {bot.get('bot_name')} to {new_name}",
+                user_id=0,
+                level='info'
+            )
+            
+            # Clear cache
+            _cache['bots'] = None
+            
+            return jsonify({'success': True, 'message': 'Bot renamed successfully'})
+        else:
+            return jsonify({'success': False, 'error': message}), 400
+            
+    except Exception as e:
+        logger.error(f"Error renaming bot: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bulk/webhook-check', methods=['POST'])
+@login_required
+@api_key_required
+def bulk_webhook_check():
+    """Check webhooks for all bots"""
+    try:
+        bots = get_cached_bots()
+        results = []
+        
+        for bot in bots[:10]:  # Limit to 10 to avoid rate limits
+            if bot.get('is_active'):
+                webhook_info = check_webhook(bot['bot_token'])
+                results.append({
+                    'bot_name': bot.get('bot_name'),
+                    'bot_token': bot['bot_token'][:10] + '...',
+                    'status': webhook_info.get('status', 'unknown'),
+                    'url': webhook_info.get('url', 'Not set')
+                })
+        
+        return jsonify({
+            'success': True,
+            'checked': len(results),
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in bulk webhook check: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==================== API ENDPOINTS (Protected) ====================
 
 @app.route('/api/bots', methods=['GET'])
@@ -489,7 +762,8 @@ def list_bots_api():
                 'bot_token': bot.get('bot_token'),  # Return FULL token since this is internal API
                 'owner_id': bot.get('owner_id'),
                 'created_at': str(bot.get('created_at')) if bot.get('created_at') else None,
-                'bot_username': bot.get('bot_username')
+                'bot_username': bot.get('bot_username'),
+                'last_seen': str(bot.get('last_seen')) if bot.get('last_seen') else None
             }
             safe_bots.append(safe_bot)
 

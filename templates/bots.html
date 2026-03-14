@@ -8,9 +8,14 @@
 <div class="card">
     <div class="card-header">
         <h3><i class="fas fa-filter"></i> Filters</h3>
-        <button class="btn btn-primary" onclick="refreshBotList()">
-            <i class="fas fa-sync"></i> Refresh
-        </button>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn btn-primary" onclick="refreshBotList()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+            <button class="btn btn-success" onclick="showAddBotModal()">
+                <i class="fas fa-plus"></i> Add New Bot
+            </button>
+        </div>
     </div>
     
     <div style="display: flex; gap: 16px; flex-wrap: wrap;">
@@ -47,7 +52,7 @@
                     <th>Type</th>
                     <th>Status</th>
                     <th>Webhook</th>
-                    <th>Owner ID</th>
+                    <th>Token</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>
@@ -72,8 +77,304 @@
     </div>
 </div>
 
+<!-- Add Bot Modal -->
+<div id="addBotModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus-circle"></i> Add New Bot</h3>
+            <span class="close" onclick="closeAddBotModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="addBotForm" onsubmit="submitAddBot(event)">
+                <div class="form-group">
+                    <label for="bot_token">Bot Token <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="bot_token" name="bot_token" required 
+                           placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                           pattern="\d+:[A-Za-z0-9_-]{30,}"
+                           title="Format: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                    <small style="color: #94a3b8;">Get this from @BotFather on Telegram</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bot_name">Bot Name <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="bot_name" name="bot_name" required 
+                           placeholder="My Awesome Bot"
+                           minlength="3" maxlength="100">
+                </div>
+                
+                <div class="form-group">
+                    <label for="bot_type">Bot Type <span style="color: #f87171;">*</span></label>
+                    <select id="bot_type" name="bot_type" required style="width: 100%; padding: 10px; background: #1e293b; color: #e2e8f0; border: 1px solid #2d3748; border-radius: 6px;">
+                        <option value="">Select type...</option>
+                        <option value="master">🤖 Master Controller</option>
+                        <option value="ardayda">📚 Ardayda Student</option>
+                        <option value="dhalinyaro">👥 Dhalinyaro Youth</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bot_username">Bot Username (optional)</label>
+                    <input type="text" id="bot_username" name="bot_username" 
+                           placeholder="@mybot">
+                    <small style="color: #94a3b8;">Telegram username without @</small>
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddBotModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success" id="submitAddBot">
+                        <i class="fas fa-plus"></i> Add Bot
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Bot Modal -->
+<div id="editBotModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Edit Bot</h3>
+            <span class="close" onclick="closeEditBotModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="editBotForm" onsubmit="submitEditBot(event)">
+                <input type="hidden" id="edit_bot_token" name="bot_token">
+                
+                <div class="form-group">
+                    <label for="edit_bot_name">Bot Name</label>
+                    <input type="text" id="edit_bot_name" name="bot_name" required 
+                           minlength="3" maxlength="100">
+                </div>
+                
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditBotModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bot Details Modal -->
+<div id="botDetailsModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-info-circle"></i> Bot Details</h3>
+            <span class="close" onclick="closeBotDetailsModal()">&times;</span>
+        </div>
+        <div class="modal-body" id="botDetailsContent">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-exclamation-triangle" style="color: #f59e0b;"></i> Confirm Action</h3>
+            <span class="close" onclick="closeConfirmModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p id="confirmMessage">Are you sure?</p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirmActionBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Webhook Info Modal -->
+<div id="webhookModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-webhook"></i> Webhook Information</h3>
+            <span class="close" onclick="closeWebhookModal()">&times;</span>
+        </div>
+        <div class="modal-body" id="webhookDetailsContent">
+            Loading...
+        </div>
+    </div>
+</div>
+
+<style>
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: #030712;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: #030712;
+    z-index: 1;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #fff;
+}
+
+.close {
+    color: #94a3b8;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close:hover {
+    color: #f87171;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    background: #1e293b;
+    border: 1px solid #2d3748;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 4px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.btn-success {
+    background: #059669;
+    color: #fff;
+}
+
+.btn-success:hover {
+    background: #047857;
+}
+
+/* Action Buttons */
+.action-btn {
+    padding: 6px 10px;
+    margin: 0 2px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.action-btn.view {
+    background: #2563eb;
+    color: #fff;
+}
+
+.action-btn.view:hover {
+    background: #1d4ed8;
+}
+
+.action-btn.edit {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.action-btn.edit:hover {
+    background: #d97706;
+}
+
+.action-btn.webhook {
+    background: #8b5cf6;
+    color: #fff;
+}
+
+.action-btn.webhook:hover {
+    background: #7c3aed;
+}
+
+.action-btn.delete {
+    background: #dc2626;
+    color: #fff;
+}
+
+.action-btn.delete:hover {
+    background: #b91c1c;
+}
+
+/* Token display */
+.token-display {
+    font-family: monospace;
+    background: #1e293b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+</style>
+
 <script>
-// ==================== API CONFIGURATION (duplicated from base.html for safety) ====================
+// ==================== API CONFIGURATION ====================
 const API_KEY = 'change-this-in-production'; // Must match the API_KEY in your environment variables
 
 // Helper function for API calls with authentication
@@ -81,6 +382,7 @@ async function apiFetch(url, options = {}) {
     const defaultOptions = {
         headers: {
             'X-API-Key': API_KEY,
+            'Content-Type': 'application/json',
             ...options.headers
         }
     };
@@ -93,6 +395,11 @@ let allBots = [];
 let filteredBots = [];
 let currentPage = 1;
 const itemsPerPage = 10;
+
+// Current bot being acted upon
+let currentBotToken = null;
+
+// ==================== LOAD BOTS ====================
 
 async function loadBots() {
     try {
@@ -191,13 +498,17 @@ function renderTable() {
             '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>' : 
             '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
         
-        // Webhook (placeholder)
+        // Webhook (will be updated dynamically)
         const webhookCell = row.insertCell();
-        webhookCell.innerHTML = '<span class="badge badge-info"><i class="fas fa-question"></i> Unknown</span>';
+        webhookCell.innerHTML = '<span class="badge badge-info"><i class="fas fa-sync fa-spin"></i> Checking...</span>';
+        checkWebhookStatus(bot.bot_token, webhookCell);
         
-        // Owner ID
-        const ownerCell = row.insertCell();
-        ownerCell.innerHTML = `<code>${bot.owner_id || 'N/A'}</code>`;
+        // Token (masked)
+        const tokenCell = row.insertCell();
+        const maskedToken = bot.bot_token ? 
+            `<span class="token-display" title="${bot.bot_token}">${bot.bot_token.substring(0, 10)}...</span>` : 
+            'N/A';
+        tokenCell.innerHTML = maskedToken;
         
         // Created
         const createdCell = row.insertCell();
@@ -211,15 +522,381 @@ function renderTable() {
         // Actions
         const actionsCell = row.insertCell();
         actionsCell.innerHTML = `
-            <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="viewBot('${bot.bot_token}')">
+            <button class="action-btn view" onclick="viewBotDetails('${bot.bot_token}')" title="View Details">
                 <i class="fas fa-eye"></i>
             </button>
-            <button class="btn btn-danger" style="padding: 4px 8px; margin-left: 4px;" onclick="deleteBot('${bot.bot_token}')">
+            <button class="action-btn edit" onclick="showEditBotModal('${bot.bot_token}', '${bot.bot_name}')" title="Edit Name">
+                <i class="fas fa-edit"></i>
+            </button>
+            <button class="action-btn webhook" onclick="checkWebhookFull('${bot.bot_token}')" title="Webhook Info">
+                <i class="fas fa-globe"></i>
+            </button>
+            <button class="action-btn ${bot.is_active ? 'warning' : 'success'}" onclick="toggleBotStatus('${bot.bot_token}', ${!bot.is_active})" title="${bot.is_active ? 'Deactivate' : 'Activate'}">
+                <i class="fas fa-${bot.is_active ? 'pause' : 'play'}"></i>
+            </button>
+            <button class="action-btn delete" onclick="confirmDeleteBot('${bot.bot_token}', '${bot.bot_name}')" title="Delete">
                 <i class="fas fa-trash"></i>
             </button>
         `;
     });
 }
+
+// ==================== WEBHOOK FUNCTIONS ====================
+
+async function checkWebhookStatus(botToken, cell) {
+    try {
+        const res = await apiFetch(`/api/webhook/check/${botToken}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            const status = data.status;
+            let html = '';
+            
+            if (status === 'active') {
+                html = '<span class="badge badge-success"><i class="fas fa-check-circle"></i> Active</span>';
+            } else if (status === 'pending') {
+                html = '<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>';
+            } else {
+                html = '<span class="badge badge-danger"><i class="fas fa-exclamation-circle"></i> Failed</span>';
+            }
+            
+            cell.innerHTML = html;
+        } else {
+            cell.innerHTML = '<span class="badge badge-danger">Error</span>';
+        }
+    } catch (error) {
+        console.error('Webhook check failed:', error);
+        cell.innerHTML = '<span class="badge badge-danger">Error</span>';
+    }
+}
+
+async function checkWebhookFull(botToken) {
+    showToast('Checking webhook...', 'info');
+    
+    try {
+        const res = await apiFetch(`/api/webhook/check/${botToken}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        let content = '';
+        
+        if (data.success) {
+            content = `
+                <div style="margin-bottom: 16px;">
+                    <div style="color: #94a3b8; margin-bottom: 4px;">Status</div>
+                    <div><span class="badge ${data.status === 'active' ? 'badge-success' : data.status === 'pending' ? 'badge-warning' : 'badge-danger'}">${data.status || 'unknown'}</span></div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="color: #94a3b8; margin-bottom: 4px;">Webhook URL</div>
+                    <div style="word-break: break-all; background: #1e293b; padding: 8px; border-radius: 4px;">${data.url || 'Not set'}</div>
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <div style="color: #94a3b8; margin-bottom: 4px;">Pending Updates</div>
+                    <div>${data.pending_update_count || 0}</div>
+                </div>
+            `;
+            
+            if (data.last_error_message) {
+                content += `
+                    <div style="margin-bottom: 16px;">
+                        <div style="color: #94a3b8; margin-bottom: 4px;">Last Error</div>
+                        <div style="color: #f87171;">${data.last_error_message}</div>
+                    </div>
+                `;
+            }
+            
+            content += `
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="setupWebhook('${botToken}')">
+                        <i class="fas fa-sync"></i> Setup Webhook
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeWebhookModal()">Close</button>
+                </div>
+            `;
+        } else {
+            content = `
+                <div style="color: #f87171; text-align: center; padding: 20px;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 48px; margin-bottom: 16px;"></i>
+                    <p>Failed to check webhook: ${data.error}</p>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="setupWebhook('${botToken}')">
+                        <i class="fas fa-sync"></i> Setup Webhook
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeWebhookModal()">Close</button>
+                </div>
+            `;
+        }
+        
+        document.getElementById('webhookDetailsContent').innerHTML = content;
+        document.getElementById('webhookModal').style.display = 'flex';
+        
+    } catch (error) {
+        showToast('Error checking webhook', 'error');
+    }
+}
+
+async function setupWebhook(botToken) {
+    showToast('Setting up webhook...', 'info');
+    
+    try {
+        // Get bot type
+        const bot = allBots.find(b => b.bot_token === botToken);
+        if (!bot) {
+            showToast('Bot not found', 'error');
+            return;
+        }
+        
+        const res = await apiFetch(`/api/bots/${botToken}/webhook`, {
+            method: 'POST',
+            body: JSON.stringify({ bot_type: bot.bot_type })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Webhook setup successful!', 'success');
+            closeWebhookModal();
+            refreshBotList();
+        } else {
+            showToast('Webhook setup failed: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Error setting up webhook', 'error');
+    }
+}
+
+// ==================== ADD BOT FUNCTIONS ====================
+
+function showAddBotModal() {
+    document.getElementById('addBotModal').style.display = 'flex';
+    document.getElementById('addBotForm').reset();
+}
+
+function closeAddBotModal() {
+    document.getElementById('addBotModal').style.display = 'none';
+}
+
+async function submitAddBot(event) {
+    event.preventDefault();
+    
+    const submitBtn = document.getElementById('submitAddBot');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+    
+    const formData = {
+        bot_token: document.getElementById('bot_token').value.trim(),
+        bot_name: document.getElementById('bot_name').value.trim(),
+        bot_type: document.getElementById('bot_type').value,
+        bot_username: document.getElementById('bot_username').value.trim() || null
+    };
+    
+    try {
+        const res = await apiFetch('/api/bots/add', {
+            method: 'POST',
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Bot added successfully!', 'success');
+            closeAddBotModal();
+            refreshBotList();
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Failed to add bot', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Add Bot';
+    }
+}
+
+// ==================== EDIT BOT FUNCTIONS ====================
+
+function showEditBotModal(botToken, botName) {
+    document.getElementById('edit_bot_token').value = botToken;
+    document.getElementById('edit_bot_name').value = botName;
+    document.getElementById('editBotModal').style.display = 'flex';
+}
+
+function closeEditBotModal() {
+    document.getElementById('editBotModal').style.display = 'none';
+}
+
+async function submitEditBot(event) {
+    event.preventDefault();
+    
+    const botToken = document.getElementById('edit_bot_token').value;
+    const newName = document.getElementById('edit_bot_name').value.trim();
+    
+    try {
+        const res = await apiFetch(`/api/bots/${botToken}/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ new_name: newName })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Bot renamed successfully!', 'success');
+            closeEditBotModal();
+            refreshBotList();
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Failed to rename bot', 'error');
+    }
+}
+
+// ==================== DELETE BOT FUNCTIONS ====================
+
+function confirmDeleteBot(botToken, botName) {
+    currentBotToken = botToken;
+    document.getElementById('confirmMessage').innerHTML = `
+        Are you sure you want to delete <strong>${botName}</strong>?<br><br>
+        <span style="color: #f87171;">This action CANNOT be undone!</span>
+    `;
+    document.getElementById('confirmActionBtn').onclick = () => executeDeleteBot(botToken);
+    document.getElementById('confirmModal').style.display = 'flex';
+}
+
+async function executeDeleteBot(botToken) {
+    closeConfirmModal();
+    showToast('Deleting bot...', 'info');
+    
+    try {
+        const res = await apiFetch(`/api/bots/${botToken}/delete`, {
+            method: 'POST'
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Bot deleted successfully!', 'success');
+            refreshBotList();
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Failed to delete bot', 'error');
+    }
+}
+
+// ==================== TOGGLE BOT STATUS ====================
+
+async function toggleBotStatus(botToken, activate) {
+    const action = activate ? 'Activating' : 'Deactivating';
+    showToast(`${action} bot...`, 'info');
+    
+    try {
+        const res = await apiFetch(`/api/bots/${botToken}/toggle`, {
+            method: 'POST',
+            body: JSON.stringify({ active: activate })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast(`Bot ${activate ? 'activated' : 'deactivated'} successfully!`, 'success');
+            refreshBotList();
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast(`Failed to ${activate ? 'activate' : 'deactivate'} bot`, 'error');
+    }
+}
+
+// ==================== VIEW BOT DETAILS ====================
+
+async function viewBotDetails(botToken) {
+    const bot = allBots.find(b => b.bot_token === botToken);
+    if (!bot) return;
+    
+    let content = `
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Name</div>
+            <div style="font-size: 18px; font-weight: 600;">${bot.bot_name || 'Unnamed'}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Type</div>
+            <div><span class="badge badge-info">${bot.bot_type || 'unknown'}</span></div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Status</div>
+            <div>${bot.is_active ? 
+                '<span class="badge badge-success">Active</span>' : 
+                '<span class="badge badge-danger">Inactive</span>'}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Token</div>
+            <div style="word-break: break-all; background: #1e293b; padding: 8px; border-radius: 4px; font-family: monospace;">${bot.bot_token}</div>
+        </div>
+    `;
+    
+    if (bot.bot_username) {
+        content += `
+            <div style="margin-bottom: 16px;">
+                <div style="color: #94a3b8; margin-bottom: 4px;">Username</div>
+                <div>@${bot.bot_username}</div>
+            </div>
+        `;
+    }
+    
+    if (bot.created_at) {
+        content += `
+            <div style="margin-bottom: 16px;">
+                <div style="color: #94a3b8; margin-bottom: 4px;">Created</div>
+                <div>${new Date(bot.created_at).toLocaleString()}</div>
+            </div>
+        `;
+    }
+    
+    if (bot.last_seen) {
+        content += `
+            <div style="margin-bottom: 16px;">
+                <div style="color: #94a3b8; margin-bottom: 4px;">Last Seen</div>
+                <div>${new Date(bot.last_seen).toLocaleString()}</div>
+            </div>
+        `;
+    }
+    
+    content += `
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Owner ID</div>
+            <div><code>${bot.owner_id || 0}</code></div>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="closeBotDetailsModal()">Close</button>
+        </div>
+    `;
+    
+    document.getElementById('botDetailsContent').innerHTML = content;
+    document.getElementById('botDetailsModal').style.display = 'flex';
+}
+
+// ==================== MODAL FUNCTIONS ====================
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+}
+
+function closeBotDetailsModal() {
+    document.getElementById('botDetailsModal').style.display = 'none';
+}
+
+function closeWebhookModal() {
+    document.getElementById('webhookModal').style.display = 'none';
+}
+
+// ==================== PAGINATION ====================
 
 function prevPage() {
     if (currentPage > 1) {
@@ -240,25 +917,41 @@ function refreshBotList() {
     loadBots();
 }
 
-function viewBot(token) {
-    alert(`View bot details for token: ${token.substring(0, 10)}...\n(This feature coming soon)`);
-}
+// ==================== TOAST NOTIFICATION ====================
 
-function deleteBot(token) {
-    if (confirm(`Are you sure you want to delete bot ${token.substring(0, 10)}...?\nThis action cannot be undone!`)) {
-        alert('Delete functionality coming soon');
+function showToast(message, type = 'info') {
+    // Use the toast function from base.html if available
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else {
+        // Fallback
+        alert(message);
     }
 }
 
-// Event listeners
+// ==================== EVENT LISTENERS ====================
+
 document.getElementById('type-filter').addEventListener('change', applyFilters);
 document.getElementById('status-filter').addEventListener('change', applyFilters);
 document.getElementById('search-bot').addEventListener('input', applyFilters);
 
+// Close modals when clicking outside
+window.onclick = function(event) {
+    const modals = ['addBotModal', 'editBotModal', 'botDetailsModal', 'confirmModal', 'webhookModal'];
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+}
+
+// ==================== INITIALIZATION ====================
+
 // Load bots on page load
 loadBots();
 
-// Auto-refresh every minute
+// Auto-refresh every 60 seconds
 setInterval(loadBots, 60000);
 </script>
 {% endblock %}

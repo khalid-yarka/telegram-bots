@@ -1,0 +1,499 @@
+<!-- templates/modals/edit_bot_modal.html -->
+<!-- Edit Bot Modal - For renaming and managing bot settings -->
+
+<div id="editBotModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Edit Bot</h3>
+            <span class="close" onclick="closeEditBotModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <!-- Tab Navigation -->
+            <div style="display: flex; border-bottom: 1px solid #1e293b; margin-bottom: 20px;">
+                <button class="tab-btn active" onclick="switchEditTab('basic')" id="tab-basic">
+                    <i class="fas fa-info-circle"></i> Basic
+                </button>
+                <button class="tab-btn" onclick="switchEditTab('webhook')" id="tab-webhook">
+                    <i class="fas fa-globe"></i> Webhook
+                </button>
+                <button class="tab-btn" onclick="switchEditTab('advanced')" id="tab-advanced">
+                    <i class="fas fa-cog"></i> Advanced
+                </button>
+            </div>
+            
+            <!-- Basic Info Tab -->
+            <div id="edit-basic-tab" style="display: block;">
+                <form id="editBotForm" onsubmit="submitEditBot(event)">
+                    <input type="hidden" id="edit_bot_token" name="bot_token">
+                    
+                    <div class="form-group">
+                        <label for="edit_bot_name">
+                            Bot Name <span style="color: #f87171;">*</span>
+                            <span id="edit-name-counter" style="margin-left: 10px; font-size: 12px; color: #94a3b8;">0/100</span>
+                        </label>
+                        <input type="text" 
+                               id="edit_bot_name" 
+                               name="bot_name" 
+                               required 
+                               minlength="3" 
+                               maxlength="100"
+                               oninput="updateEditNameCounter(this)">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Bot Type</label>
+                        <div id="edit_bot_type_display" style="padding: 10px; background: #1e293b; border-radius: 6px; color: #94a3b8;">
+                            Loading...
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Bot Token</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <code id="edit_bot_token_display" style="background: #1e293b; padding: 8px; border-radius: 4px; flex: 1; word-break: break-all;">Loading...</code>
+                            <button type="button" class="btn btn-secondary" onclick="copyBotToken()" title="Copy Token">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Status</label>
+                        <div id="edit_bot_status" style="margin-bottom: 10px;">
+                            <span class="badge badge-success">Active</span>
+                        </div>
+                        <button type="button" class="btn btn-warning" id="toggleStatusBtn" onclick="toggleBotStatusFromModal()">
+                            <i class="fas fa-pause"></i> Deactivate Bot
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Webhook Tab -->
+            <div id="edit-webhook-tab" style="display: none;">
+                <div id="webhook-info">
+                    <div style="text-align: center; padding: 20px;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #3b82f6;"></i>
+                        <p>Loading webhook info...</p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                    <button class="btn btn-primary" onclick="refreshWebhookInfo()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-success" onclick="setupWebhookFromModal()">
+                        <i class="fas fa-plug"></i> Setup Webhook
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteWebhookFromModal()">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Advanced Tab -->
+            <div id="edit-advanced-tab" style="display: none;">
+                <div style="margin-bottom: 20px;">
+                    <h4 style="color: #fff; margin-bottom: 15px;">Danger Zone</h4>
+                    
+                    <div style="background: #2d1e1e; border: 1px solid #991b1b; border-radius: 8px; padding: 20px;">
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                            <i class="fas fa-exclamation-triangle" style="color: #f87171; font-size: 24px;"></i>
+                            <div>
+                                <div style="font-weight: 600; color: #f87171;">Delete Bot</div>
+                                <div style="color: #94a3b8; font-size: 13px;">Once deleted, all data will be permanently removed</div>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-danger" style="width: 100%;" onclick="confirmDeleteFromModal()">
+                            <i class="fas fa-trash"></i> Delete Permanently
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h4 style="color: #fff; margin-bottom: 15px;">Bot Statistics</h4>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div style="background: #1e293b; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="color: #94a3b8; font-size: 12px;">Created</div>
+                            <div id="bot-created-date" style="font-weight: 600;">-</div>
+                        </div>
+                        <div style="background: #1e293b; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="color: #94a3b8; font-size: 12px;">Last Seen</div>
+                            <div id="bot-last-seen" style="font-weight: 600;">-</div>
+                        </div>
+                        <div style="background: #1e293b; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="color: #94a3b8; font-size: 12px;">Owner ID</div>
+                            <div id="bot-owner-id" style="font-weight: 600;">-</div>
+                        </div>
+                        <div style="background: #1e293b; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="color: #94a3b8; font-size: 12px;">Bot ID</div>
+                            <div id="bot-id" style="font-weight: 600;">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer Buttons -->
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 20px;">
+                <button type="button" class="btn btn-secondary" onclick="closeEditBotModal()">
+                    <i class="fas fa-times"></i> Close
+                </button>
+                <button type="submit" form="editBotForm" class="btn btn-primary" id="saveEditBtn">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 12px 20px;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: #fff;
+    background: #1e293b;
+}
+
+.tab-btn.active {
+    color: #3b82f6;
+    border-bottom-color: #3b82f6;
+}
+
+.btn-warning {
+    background: #d97706;
+    color: #fff;
+}
+
+.btn-warning:hover {
+    background: #b45309;
+}
+
+#edit-webhook-tab .webhook-detail {
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+#edit-webhook-tab .webhook-detail label {
+    color: #94a3b8;
+    font-size: 12px;
+    display: block;
+    margin-bottom: 4px;
+}
+
+#edit-webhook-tab .webhook-detail .value {
+    color: #e2e8f0;
+    word-break: break-all;
+    font-family: monospace;
+}
+</style>
+
+<script>
+let currentEditBot = null;
+
+function showEditBotModal(botToken) {
+    const modal = document.getElementById('editBotModal');
+    modal.style.display = 'flex';
+    
+    // Reset to basic tab
+    switchEditTab('basic');
+    
+    // Load bot data
+    loadEditBotData(botToken);
+}
+
+function closeEditBotModal() {
+    document.getElementById('editBotModal').style.display = 'none';
+    currentEditBot = null;
+}
+
+function switchEditTab(tab) {
+    // Update tab buttons
+    document.getElementById('tab-basic').classList.remove('active');
+    document.getElementById('tab-webhook').classList.remove('active');
+    document.getElementById('tab-advanced').classList.remove('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    
+    // Show selected tab
+    document.getElementById('edit-basic-tab').style.display = 'none';
+    document.getElementById('edit-webhook-tab').style.display = 'none';
+    document.getElementById('edit-advanced-tab').style.display = 'none';
+    document.getElementById(`edit-${tab}-tab`).style.display = 'block';
+    
+    // Load tab-specific data
+    if (tab === 'webhook' && currentEditBot) {
+        loadWebhookInfo(currentEditBot.bot_token);
+    }
+}
+
+async function loadEditBotData(botToken) {
+    try {
+        // Find bot in allBots (assuming allBots is available globally)
+        const bot = window.allBots?.find(b => b.bot_token === botToken);
+        
+        if (!bot) {
+            showToast('Bot not found', 'error');
+            closeEditBotModal();
+            return;
+        }
+        
+        currentEditBot = bot;
+        
+        // Fill basic info
+        document.getElementById('edit_bot_token').value = bot.bot_token;
+        document.getElementById('edit_bot_name').value = bot.bot_name || '';
+        document.getElementById('edit_bot_token_display').textContent = bot.bot_token;
+        document.getElementById('edit-name-counter').textContent = `${(bot.bot_name || '').length}/100`;
+        
+        // Bot type display
+        const typeIcons = {
+            'master': '🤖',
+            'ardayda': '📚',
+            'dhalinyaro': '👥'
+        };
+        document.getElementById('edit_bot_type_display').innerHTML = 
+            `${typeIcons[bot.bot_type] || '🤖'} ${bot.bot_type || 'unknown'}`;
+        
+        // Status
+        const statusElement = document.getElementById('edit_bot_status');
+        const toggleBtn = document.getElementById('toggleStatusBtn');
+        
+        if (bot.is_active) {
+            statusElement.innerHTML = '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>';
+            toggleBtn.innerHTML = '<i class="fas fa-pause"></i> Deactivate Bot';
+            toggleBtn.className = 'btn btn-warning';
+        } else {
+            statusElement.innerHTML = '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
+            toggleBtn.innerHTML = '<i class="fas fa-play"></i> Activate Bot';
+            toggleBtn.className = 'btn btn-success';
+        }
+        
+        // Advanced tab stats
+        document.getElementById('bot-created-date').textContent = 
+            bot.created_at ? new Date(bot.created_at).toLocaleDateString() : '-';
+        document.getElementById('bot-last-seen').textContent = 
+            bot.last_seen ? formatRelativeTime(bot.last_seen) : 'Never';
+        document.getElementById('bot-owner-id').textContent = bot.owner_id || '0';
+        document.getElementById('bot-id').textContent = bot.bot_token?.substring(0, 8) || '-';
+        
+    } catch (error) {
+        console.error('Error loading bot data:', error);
+        showToast('Failed to load bot data', 'error');
+    }
+}
+
+async function loadWebhookInfo(botToken) {
+    const webhookDiv = document.getElementById('webhook-info');
+    webhookDiv.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #3b82f6;"></i><p>Loading webhook info...</p></div>';
+    
+    try {
+        const res = await apiFetch(`/api/webhook/check/${botToken}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            let html = '<div style="margin-bottom: 20px;">';
+            
+            // Status
+            html += '<div class="webhook-detail">';
+            html += '<label>Status</label>';
+            html += '<div class="value">';
+            if (data.status === 'active') {
+                html += '<span class="badge badge-success"><i class="fas fa-check-circle"></i> Active</span>';
+            } else if (data.status === 'pending') {
+                html += '<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>';
+            } else {
+                html += '<span class="badge badge-danger"><i class="fas fa-exclamation-circle"></i> Failed</span>';
+            }
+            html += '</div></div>';
+            
+            // URL
+            if (data.url) {
+                html += '<div class="webhook-detail">';
+                html += '<label>Webhook URL</label>';
+                html += `<div class="value" style="word-break: break-all;">${data.url}</div>`;
+                html += '</div>';
+            }
+            
+            // Pending updates
+            html += '<div class="webhook-detail">';
+            html += '<label>Pending Updates</label>';
+            html += `<div class="value">${data.pending_update_count || 0}</div>`;
+            html += '</div>';
+            
+            // Max connections
+            html += '<div class="webhook-detail">';
+            html += '<label>Max Connections</label>';
+            html += `<div class="value">${data.max_connections || 40}</div>`;
+            html += '</div>';
+            
+            // Last error (if any)
+            if (data.last_error_message) {
+                html += '<div class="webhook-detail">';
+                html += '<label style="color: #f87171;">Last Error</label>';
+                html += `<div class="value" style="color: #f87171;">${data.last_error_message}</div>`;
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            webhookDiv.innerHTML = html;
+        } else {
+            webhookDiv.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #f87171;">
+                    <i class="fas fa-exclamation-circle" style="font-size: 32px; margin-bottom: 10px;"></i>
+                    <p>Failed to load webhook info: ${data.error}</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        webhookDiv.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #f87171;">
+                <i class="fas fa-exclamation-circle" style="font-size: 32px; margin-bottom: 10px;"></i>
+                <p>Error loading webhook info</p>
+            </div>
+        `;
+    }
+}
+
+function updateEditNameCounter(input) {
+    const length = input.value.length;
+    const counter = document.getElementById('edit-name-counter');
+    counter.textContent = `${length}/100`;
+}
+
+async function submitEditBot(event) {
+    event.preventDefault();
+    
+    const botToken = document.getElementById('edit_bot_token').value;
+    const newName = document.getElementById('edit_bot_name').value.trim();
+    
+    if (!newName || newName.length < 3) {
+        showToast('Name must be at least 3 characters', 'error');
+        return;
+    }
+    
+    const saveBtn = document.getElementById('saveEditBtn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    try {
+        const res = await apiFetch(`/api/bots/${botToken}/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ new_name: newName })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Bot renamed successfully!', 'success');
+            closeEditBotModal();
+            if (typeof refreshBotList === 'function') {
+                refreshBotList();
+            }
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Failed to rename bot', 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+    }
+}
+
+async function toggleBotStatusFromModal() {
+    if (!currentEditBot) return;
+    
+    const newStatus = !currentEditBot.is_active;
+    const action = newStatus ? 'Activating' : 'Deactivating';
+    
+    showToast(`${action} bot...`, 'info');
+    
+    try {
+        const res = await apiFetch(`/api/bots/${currentEditBot.bot_token}/toggle`, {
+            method: 'POST',
+            body: JSON.stringify({ active: newStatus })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast(`Bot ${newStatus ? 'activated' : 'deactivated'} successfully!`, 'success');
+            currentEditBot.is_active = newStatus;
+            loadEditBotData(currentEditBot.bot_token); // Reload
+            if (typeof refreshBotList === 'function') {
+                refreshBotList();
+            }
+        } else {
+            showToast('Error: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast(`Failed to ${action.toLowerCase()} bot`, 'error');
+    }
+}
+
+async function refreshWebhookInfo() {
+    if (currentEditBot) {
+        await loadWebhookInfo(currentEditBot.bot_token);
+    }
+}
+
+async function setupWebhookFromModal() {
+    if (!currentEditBot) return;
+    
+    showToast('Setting up webhook...', 'info');
+    
+    try {
+        const res = await apiFetch(`/api/bots/${currentEditBot.bot_token}/webhook`, {
+            method: 'POST',
+            body: JSON.stringify({ bot_type: currentEditBot.bot_type })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('Webhook setup successful!', 'success');
+            await loadWebhookInfo(currentEditBot.bot_token);
+        } else {
+            showToast('Webhook setup failed: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Error setting up webhook', 'error');
+    }
+}
+
+async function deleteWebhookFromModal() {
+    if (!currentEditBot) return;
+    
+    if (!confirm('Are you sure you want to delete the webhook?')) {
+        return;
+    }
+    
+    showToast('Deleting webhook...', 'info');
+    
+    try {
+        const res = await apiFetch(`/api/webhook/check/${currentEditBot.bot_token}`, {
+            method: 'POST'
+        });
+        // This just checks, we need a delete endpoint
+        showToast('Webhook delete feature coming soon', 'info');
+    } catch (error) {
+        showToast('Error deleting webhook', 'error');
+    }
+}
+
+function confirmDeleteFromModal() {
+    if (!currentEditBot) retur

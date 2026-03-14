@@ -26,7 +26,7 @@
         <div class="stat-value" id="active-webhooks">-</div>
         <div class="stat-change">
             <i class="fas fa-check-circle"></i>
-            <span id="webhook-status">-</span> active
+            <span id="webhook-percentage">-</span> of bots
         </div>
     </div>
     
@@ -45,7 +45,7 @@
     <div class="stat-card">
         <div class="stat-title">
             <i class="fas fa-clock" style="color: #8b5cf6;"></i>
-            Uptime
+            System Uptime
         </div>
         <div class="stat-value" id="uptime">-</div>
         <div class="stat-change">
@@ -64,19 +64,51 @@
         <a href="/bots" class="btn btn-primary">
             <i class="fas fa-eye"></i> View All Bots
         </a>
-        <button class="btn btn-secondary" onclick="refreshWebhooks()">
-            <i class="fas fa-sync"></i> Check Webhooks
+        <button class="btn btn-success" onclick="window.location.href='/bots'; setTimeout(showAddBotModal, 100)">
+            <i class="fas fa-plus"></i> Add New Bot
         </button>
-        <button class="btn btn-secondary" onclick="refreshData()">
+        <button class="btn btn-secondary" onclick="checkAllWebhooks()">
+            <i class="fas fa-sync"></i> Check All Webhooks
+        </button>
+        <button class="btn btn-secondary" onclick="refreshDashboard()">
             <i class="fas fa-redo"></i> Refresh Stats
         </button>
+    </div>
+</div>
+
+<!-- Bot Type Distribution -->
+<div class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-chart-pie"></i> Bot Distribution</h3>
+        </div>
+        <div style="height: 200px; display: flex; align-items: center; justify-content: center;" id="bot-distribution">
+            <div style="text-align: center; color: #94a3b8;">
+                <i class="fas fa-chart-pie" style="font-size: 48px; margin-bottom: 10px;"></i>
+                <p>Loading distribution...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3><i class="fas fa-activity"></i> Recent Activity</h3>
+            <a href="/logs" style="color: #3b82f6; text-decoration: none; font-size: 14px;">
+                View All <i class="fas fa-arrow-right"></i>
+            </a>
+        </div>
+        <div id="recent-activity">
+            <div style="text-align: center; padding: 20px; color: #94a3b8;">
+                <i class="fas fa-spinner fa-spin"></i> Loading...
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Recent Bots -->
 <div class="card">
     <div class="card-header">
-        <h3><i class="fas fa-history"></i> Recent Bots</h3>
+        <h3><i class="fas fa-history"></i> Recently Added Bots</h3>
         <a href="/bots" style="color: #3b82f6; text-decoration: none; font-size: 14px;">
             View All <i class="fas fa-arrow-right"></i>
         </a>
@@ -91,11 +123,12 @@
                     <th>Status</th>
                     <th>Webhook</th>
                     <th>Created</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="5" style="text-align: center;">Loading bots...</td>
+                    <td colspan="6" style="text-align: center;">Loading bots...</td>
                 </tr>
             </tbody>
         </table>
@@ -108,7 +141,7 @@
         <h3><i class="fas fa-server"></i> System Status</h3>
     </div>
     
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
         <div>
             <div style="color: #94a3b8; margin-bottom: 8px;">Database</div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -116,97 +149,379 @@
                     <i class="fas fa-check-circle"></i> Connected
                 </span>
             </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;" id="db-details">
+                SQLite • Master DB
+            </div>
         </div>
         
         <div>
             <div style="color: #94a3b8; margin-bottom: 8px;">Webhook Server</div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="badge badge-success">
+                <span class="badge badge-success" id="server-status">
                     <i class="fas fa-check-circle"></i> Running
                 </span>
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;" id="server-details">
+                PythonAnywhere • Flask
             </div>
         </div>
         
         <div>
             <div style="color: #94a3b8; margin-bottom: 8px;">Last Update</div>
             <div id="last-update">Just now</div>
+            <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;" id="update-details">
+                Auto-refresh every 30s
+            </div>
+        </div>
+        
+        <div>
+            <div style="color: #94a3b8; margin-bottom: 8px;">Cache Status</div>
+            <div>
+                <span class="badge badge-info" id="cache-status">
+                    <i class="fas fa-database"></i> 60s TTL
+                </span>
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;" id="cache-details">
+                Stats & Bots cached
+            </div>
         </div>
     </div>
 </div>
 
+<!-- Include Bot Management Modals -->
+{% include 'modals/add_bot_modal.html' %}
+{% include 'modals/edit_bot_modal.html' %}
+
 <script>
+// Make allBots available globally
+let allBots = [];
+
 async function loadDashboardData() {
     try {
         const res = await apiFetch('/api/bots');
         const data = await res.json();
         
         if (data.success) {
-            // Update stats
-            document.getElementById('total-bots').textContent = data.count;
+            allBots = data.bots;
             
+            // Update stats
+            const totalBots = data.count;
             const activeBots = data.bots.filter(b => b.is_active).length;
+            
+            document.getElementById('total-bots').textContent = totalBots;
             document.getElementById('active-bots').textContent = activeBots;
             
-            // Update recent bots table
-            const tbody = document.querySelector('#recent-bots-table tbody');
-            tbody.innerHTML = '';
-            
-            const recentBots = data.bots.slice(0, 5);
-            
-            if (recentBots.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No bots found</td></tr>';
-            } else {
-                recentBots.forEach(bot => {
-                    const row = tbody.insertRow();
-                    
-                    // Name
-                    const nameCell = row.insertCell();
-                    nameCell.innerHTML = `<strong>${bot.bot_name || 'Unnamed'}</strong>`;
-                    
-                    // Type
-                    const typeCell = row.insertCell();
-                    const typeIcons = {
-                        'master': '🤖',
-                        'ardayda': '📚',
-                        'dhalinyaro': '👥'
-                    };
-                    typeCell.innerHTML = `${typeIcons[bot.bot_type] || '🤖'} ${bot.bot_type || 'unknown'}`;
-                    
-                    // Status
-                    const statusCell = row.insertCell();
-                    statusCell.innerHTML = bot.is_active ? 
-                        '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>' : 
-                        '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
-                    
-                    // Webhook (placeholder - would need another API)
-                    const webhookCell = row.insertCell();
-                    webhookCell.innerHTML = '<span class="badge badge-info">Pending</span>';
-                    
-                    // Created
-                    const createdCell = row.insertCell();
-                    if (bot.created_at) {
-                        const date = new Date(bot.created_at);
-                        createdCell.textContent = date.toLocaleDateString();
-                    } else {
-                        createdCell.textContent = 'Unknown';
+            // Update webhook stats (check first 10)
+            let activeWebhooks = 0;
+            const webhookChecks = data.bots.slice(0, 10).map(async bot => {
+                try {
+                    const webhookRes = await apiFetch(`/api/webhook/check/${bot.bot_token}`, {
+                        method: 'POST'
+                    });
+                    const webhookData = await webhookRes.json();
+                    if (webhookData.success && webhookData.status === 'active') {
+                        activeWebhooks++;
                     }
-                });
-            }
+                } catch (e) {
+                    console.error('Webhook check failed:', e);
+                }
+            });
+            
+            await Promise.all(webhookChecks);
+            
+            document.getElementById('active-webhooks').textContent = activeWebhooks;
+            const webhookPercentage = totalBots > 0 ? Math.round((activeWebhooks / Math.min(totalBots, 10)) * 100) : 0;
+            document.getElementById('webhook-percentage').textContent = webhookPercentage + '%';
+            
+            // Update user count (estimate from unique owner_ids)
+            const uniqueOwners = new Set(data.bots.map(b => b.owner_id).filter(id => id));
+            document.getElementById('total-users').textContent = uniqueOwners.size || '0';
+            
+            // Update recent bots table
+            updateRecentBotsTable(data.bots.slice(0, 5));
+            
+            // Update bot distribution chart
+            updateBotDistribution(data.bots);
+            
+            // Update recent activity
+            loadRecentActivity();
         }
     } catch (error) {
         console.error('Failed to load dashboard data:', error);
-        document.querySelector('#recent-bots-table tbody').innerHTML = 
-            '<tr><td colspan="5" style="text-align: center; color: #f87171;">Failed to load data</td></tr>';
+        showToast('Failed to load dashboard data', 'error');
     }
 }
 
-function refreshWebhooks() {
-    alert('Webhook check initiated. This may take a few moments.');
-    // In a real implementation, you'd call an API endpoint
+function updateRecentBotsTable(recentBots) {
+    const tbody = document.querySelector('#recent-bots-table tbody');
+    
+    if (recentBots.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No bots found. <a href="#" onclick="showAddBotModal()">Add your first bot</a></td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '';
+    
+    recentBots.forEach(bot => {
+        const row = tbody.insertRow();
+        
+        // Name
+        const nameCell = row.insertCell();
+        nameCell.innerHTML = `<strong>${bot.bot_name || 'Unnamed'}</strong>`;
+        
+        // Type
+        const typeCell = row.insertCell();
+        const typeIcons = {
+            'master': '🤖',
+            'ardayda': '📚',
+            'dhalinyaro': '👥'
+        };
+        typeCell.innerHTML = `${typeIcons[bot.bot_type] || '🤖'} ${bot.bot_type || 'unknown'}`;
+        
+        // Status
+        const statusCell = row.insertCell();
+        statusCell.innerHTML = bot.is_active ? 
+            '<span class="badge badge-success"><i class="fas fa-circle"></i> Active</span>' : 
+            '<span class="badge badge-danger"><i class="fas fa-circle"></i> Inactive</span>';
+        
+        // Webhook (will check dynamically)
+        const webhookCell = row.insertCell();
+        webhookCell.innerHTML = '<span class="badge badge-info"><i class="fas fa-sync fa-spin"></i> Checking...</span>';
+        checkWebhookStatus(bot.bot_token, webhookCell);
+        
+        // Created
+        const createdCell = row.insertCell();
+        if (bot.created_at) {
+            const date = new Date(bot.created_at);
+            createdCell.textContent = date.toLocaleDateString();
+        } else {
+            createdCell.textContent = 'Unknown';
+        }
+        
+        // Actions
+        const actionsCell = row.insertCell();
+        actionsCell.innerHTML = `
+            <button class="action-btn view" onclick="viewBotDetails('${bot.bot_token}')" title="View Details">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="action-btn edit" onclick="showEditBotModal('${bot.bot_token}')" title="Edit Bot">
+                <i class="fas fa-edit"></i>
+            </button>
+        `;
+    });
 }
 
-function refreshData() {
+async function checkWebhookStatus(botToken, cell) {
+    try {
+        const res = await apiFetch(`/api/webhook/check/${botToken}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            const status = data.status;
+            let html = '';
+            
+            if (status === 'active') {
+                html = '<span class="badge badge-success"><i class="fas fa-check-circle"></i> Active</span>';
+            } else if (status === 'pending') {
+                html = '<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>';
+            } else {
+                html = '<span class="badge badge-danger"><i class="fas fa-exclamation-circle"></i> Failed</span>';
+            }
+            
+            cell.innerHTML = html;
+        } else {
+            cell.innerHTML = '<span class="badge badge-danger">Error</span>';
+        }
+    } catch (error) {
+        console.error('Webhook check failed:', error);
+        cell.innerHTML = '<span class="badge badge-danger">Error</span>';
+    }
+}
+
+function updateBotDistribution(bots) {
+    const container = document.getElementById('bot-distribution');
+    
+    // Count by type
+    const counts = {
+        master: bots.filter(b => b.bot_type === 'master').length,
+        ardayda: bots.filter(b => b.bot_type === 'ardayda').length,
+        dhalinyaro: bots.filter(b => b.bot_type === 'dhalinyaro').length,
+        other: bots.filter(b => !['master', 'ardayda', 'dhalinyaro'].includes(b.bot_type)).length
+    };
+    
+    const total = bots.length;
+    
+    if (total === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; color: #94a3b8;">
+                <i class="fas fa-chart-pie" style="font-size: 48px; margin-bottom: 10px;"></i>
+                <p>No bots to display</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Create simple bar chart
+    let html = '<div style="width: 100%;">';
+    
+    const types = [
+        { name: 'Master', count: counts.master, color: '#3b82f6' },
+        { name: 'Ardayda', count: counts.ardayda, color: '#10b981' },
+        { name: 'Dhalinyaro', count: counts.dhalinyaro, color: '#8b5cf6' },
+        { name: 'Other', count: counts.other, color: '#94a3b8' }
+    ];
+    
+    types.forEach(type => {
+        if (type.count > 0) {
+            const percentage = Math.round((type.count / total) * 100);
+            html += `
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span>${type.name}</span>
+                        <span>${type.count} (${percentage}%)</span>
+                    </div>
+                    <div style="background: #1e293b; height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="background: ${type.color}; width: ${percentage}%; height: 100%;"></div>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function loadRecentActivity() {
+    const container = document.getElementById('recent-activity');
+    
+    try {
+        const res = await apiFetch('/api/logs?limit=5');
+        const data = await res.json();
+        
+        if (data.success && data.logs.length > 0) {
+            let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+            
+            data.logs.forEach(log => {
+                const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Unknown';
+                const icon = log.action_type === 'bot_added' ? 'fa-plus-circle' :
+                            log.action_type === 'bot_deleted' ? 'fa-trash' :
+                            log.action_type === 'webhook_setup' ? 'fa-globe' : 'fa-info-circle';
+                
+                const color = log.action_type === 'bot_added' ? '#10b981' :
+                             log.action_type === 'bot_deleted' ? '#f87171' :
+                             log.action_type === 'webhook_setup' ? '#60a5fa' : '#94a3b8';
+                
+                html += `
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 8px; background: #1e293b; border-radius: 6px;">
+                        <i class="fas ${icon}" style="color: ${color}; width: 20px;"></i>
+                        <div style="flex: 1;">
+                            <div style="font-size: 13px;">${log.details || log.action_type}</div>
+                            <div style="font-size: 11px; color: #94a3b8;">${time}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">No recent activity</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load activity:', error);
+        container.innerHTML = '<div style="text-align: center; color: #f87171; padding: 20px;">Failed to load activity</div>';
+    }
+}
+
+async function checkAllWebhooks() {
+    showToast('Checking webhooks for active bots...', 'info');
+    
+    try {
+        const activeBots = allBots.filter(b => b.is_active).slice(0, 5); // Limit to 5
+        
+        let successCount = 0;
+        for (const bot of activeBots) {
+            try {
+                const res = await apiFetch(`/api/webhook/check/${bot.bot_token}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success && data.status === 'active') {
+                    successCount++;
+                }
+            } catch (e) {
+                console.error('Webhook check failed:', e);
+            }
+        }
+        
+        showToast(`Checked ${activeBots.length} bots, ${successCount} active`, 'success');
+        refreshDashboard();
+    } catch (error) {
+        showToast('Failed to check webhooks', 'error');
+    }
+}
+
+function refreshDashboard() {
     loadDashboardData();
+}
+
+function viewBotDetails(botToken) {
+    const bot = allBots.find(b => b.bot_token === botToken);
+    if (!bot) return;
+    
+    let content = `
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Name</div>
+            <div style="font-size: 18px; font-weight: 600;">${bot.bot_name || 'Unnamed'}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Type</div>
+            <div><span class="badge badge-info">${bot.bot_type || 'unknown'}</span></div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Status</div>
+            <div>${bot.is_active ? 
+                '<span class="badge badge-success">Active</span>' : 
+                '<span class="badge badge-danger">Inactive</span>'}</div>
+        </div>
+        <div style="margin-bottom: 16px;">
+            <div style="color: #94a3b8; margin-bottom: 4px;">Bot Token</div>
+            <div style="word-break: break-all; background: #1e293b; padding: 8px; border-radius: 4px; font-family: monospace;">${bot.bot_token}</div>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="window.location.href='/bots'">Manage Bots</button>
+            <button class="btn btn-secondary" onclick="closeBotDetailsModal()">Close</button>
+        </div>
+    `;
+    
+    // Create a simple modal if it doesn't exist
+    let modal = document.getElementById('quickViewModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'quickViewModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-info-circle"></i> Bot Details</h3>
+                    <span class="close" onclick="document.getElementById('quickViewModal').style.display='none'">&times;</span>
+                </div>
+                <div class="modal-body" id="quickViewContent"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    document.getElementById('quickViewContent').innerHTML = content;
+    modal.style.display = 'flex';
+}
+
+function closeBotDetailsModal() {
+    const modal = document.getElementById('quickViewModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Load data on page load
